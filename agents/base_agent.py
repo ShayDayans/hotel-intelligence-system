@@ -192,6 +192,7 @@ class BaseAgent(ABC):
 
     def search_rag(self, query: str, namespace: str, k: int = 5, filter_dict: dict = None) -> list:
         """Search RAG for relevant documents."""
+        k = int(k)  # Coerce in case LLM passes string
         vectorstore = self.get_vectorstore(namespace)
         try:
             results = vectorstore.similarity_search(query, k=k, filter=filter_dict)

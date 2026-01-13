@@ -92,6 +92,7 @@ Hotel context:
             city: City to search in (defaults to hotel's city)
             k: Number of competitors to return
         """
+        k = int(k)  # Coerce in case LLM passes string
         search_city = city or self.city
         search_city_lower = search_city.lower()
 
@@ -180,6 +181,7 @@ Hotel context:
         Args:
             k: Number of competitors to return
         """
+        k = int(k)  # Coerce in case LLM passes string
         # Try ML-based approach first
         ml_results = find_competitors_ml(self.hotel_id, k=k)
 

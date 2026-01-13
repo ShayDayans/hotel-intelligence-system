@@ -79,6 +79,7 @@ Metric:"""
             metric: The metric to compare (e.g., "price", "rating", "amenities")
             k: Number of competitors to compare against
         """
+        k = int(k)  # Coerce in case LLM passes string
         print(f"[Benchmark] Comparing metric: {metric}")
 
         # Get own hotel data
@@ -162,6 +163,7 @@ Metric:"""
             metric: Metric to rank by (e.g., "rating", "price")
             k: Number of hotels to include in ranking
         """
+        k = int(k)  # Coerce in case LLM passes string
         print(f"[Benchmark] Ranking by: {metric}")
 
         # Get all hotels
@@ -200,6 +202,7 @@ Metric:"""
 
     def _find_competitors(self, k: int = 5) -> List[dict]:
         """Find competitors using ML or geo fallback."""
+        k = int(k)  # Coerce in case LLM passes string
         # Try ML first
         ml_results = find_competitors_ml(self.hotel_id, k=k)
         if ml_results:

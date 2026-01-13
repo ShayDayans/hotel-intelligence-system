@@ -60,6 +60,7 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         """
         Search internal Booking.com reviews.
         """
+        k = int(k)  # Coerce in case LLM passes string
         # Filter by hotel_id to prevent seeing other hotels' data
         docs = self.search_rag(
             query,
@@ -81,6 +82,7 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         """
         Search internal Airbnb reviews.
         """
+        k = int(k)  # Coerce in case LLM passes string
         # Filter by hotel_id
         docs = self.search_rag(
             query,
@@ -108,6 +110,7 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
             query: Topic to search for in reviews (e.g., "cleanliness", "wifi")
             k: Number of reviews to return
         """
+        k = int(k)  # Coerce in case LLM passes string
         # Determine namespace from hotel_id prefix
         if hotel_id.startswith("BKG_"):
             namespace = "booking_reviews"

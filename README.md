@@ -740,28 +740,6 @@ I found 1 review mentioning wifi. The guest reported poor wifi quality.
 No other sources mentioned wifi signal strength.
 ```
 
-### Custom ML Model Integration
-
-Replace the black-box function in `agents/competitor_analyst.py`:
-
-```python
-def find_competitors_ml(hotel_id: str, k: int = 5) -> List[dict]:
-    # Your ML model integration here
-    from your_ml_module import CompetitorModel
-
-    model = CompetitorModel.load("path/to/model")
-    results = model.predict(hotel_id, k=k)
-
-    return [
-        {
-            "hotel_id": result.hotel_id,
-            "similarity_score": result.score,
-            "source": result.source
-        }
-        for result in results
-    ]
-```
-
 ### Adding New Specialist Agents
 
 1. Create new agent class inheriting from `BaseAgent`

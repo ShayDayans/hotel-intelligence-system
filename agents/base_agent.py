@@ -9,19 +9,30 @@ Includes output validation to catch hallucinations.
 import os
 from abc import ABC, abstractmethod
 from typing import Optional
-from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, AIMessage
+import os
 
-load_dotenv()
-
+# Handle imports whether run from project root or agents directory
+try:
+    from agents.config_databricks import get_secret, is_databricks
+except ModuleNotFoundError:
+    from config_databricks import get_secret, is_databricks
+if os.path.exists(".env"):
+    from dotenv import load_dotenv
+    load_dotenv()
+    
 # Import validator (optional - graceful fallback if not available)
 try:
     from agents.utils.output_validator import validate_response, OutputValidator
     VALIDATION_AVAILABLE = True
-except ImportError:
-    VALIDATION_AVAILABLE = False
+except (ImportError, ModuleNotFoundError):
+    try:
+        from utils.output_validator import validate_response, OutputValidator
+        VALIDATION_AVAILABLE = True
+    except (ImportError, ModuleNotFoundError):
+        VALIDATION_AVAILABLE = False
 
 # Configuration
 INDEX_NAME = "booking-agent"
@@ -29,18 +40,21 @@ EMBEDDING_MODEL = "BAAI/bge-m3"
 
 # Fallback Configuration (Groq is excellent for tool calling)
 FALLBACK_MODEL = "llama-3.3-70b-versatile"
+FALLBACK_MODEL_2 = "llama-3.1-8b-instant"  # Secondary fallback when Llama hits rate limit
 
 class LLMWithFallback:
     """
     Wrapper that automatically falls back to Groq on Gemini quota errors.
-    Both models support Tool Calling.
+    Supports multiple fallback levels: Gemini -> Llama -> Mixtral
     """
 
     def __init__(self):
         self._primary = None
         self._fallback = None
-        self._using_fallback = False
-        self._init_primary()
+        self._fallback_2 = None
+        self._using_fallback = True
+        self._using_fallback_2 = False
+        # self._init_primary()
 
     def _init_primary(self):
         """Initialize Gemini."""
@@ -62,12 +76,11 @@ class LLMWithFallback:
                 from langchain_groq import ChatGroq
                 api_key = os.getenv("GROQ_API_KEY")
                 if not api_key:
-                    raise ValueError("GROQ_API_KEY not found in .env")
-
+                    raise ValueError("GROQ_API_KEY not found. Set it in .env (local) or cluster environment variables (Databricks).")
                 self._fallback = ChatGroq(
                     model=FALLBACK_MODEL,
                     temperature=0,
-                    max_retries=2,
+                    max_retries=1,
                     api_key=api_key
                 )
                 print(f"[LLM] Fallback initialized: {FALLBACK_MODEL}")
@@ -78,39 +91,72 @@ class LLMWithFallback:
                 print(f"[LLM] Failed to init fallback: {e}")
                 raise
 
-    def invoke(self, messages):
-        """Invoke with automatic failover."""
-        # 1. Try Fallback if already flagged
-        if self._using_fallback:
-            self._init_fallback()
-            return self._fallback.invoke(messages)
+    def _init_fallback_2(self):
+        """Initialize secondary fallback (Mixtral)."""
+        if self._fallback_2 is None:
+            try:
+                from langchain_groq import ChatGroq
+                api_key = os.getenv("GROQ_API_KEY")
+                if not api_key:
+                    raise ValueError("GROQ_API_KEY not found.")
+                self._fallback_2 = ChatGroq(
+                    model=FALLBACK_MODEL_2,
+                    temperature=0,
+                    max_retries=1,
+                    api_key=api_key
+                )
+                print(f"[LLM] Secondary fallback initialized: {FALLBACK_MODEL_2}")
+            except Exception as e:
+                print(f"[LLM] Failed to init secondary fallback: {e}")
+                raise
 
-        # 2. Try Primary (Gemini)
+    def _get_current_model(self):
+        """Get the currently active model."""
+        if self._using_fallback_2:
+            self._init_fallback_2()
+            return self._fallback_2
+        elif self._using_fallback:
+            self._init_fallback()
+            return self._fallback
+        return self._primary
+
+    def invoke(self, messages):
+        """Invoke with automatic failover through multiple fallback levels."""
+        model = self._get_current_model()
+        
         try:
-            return self._primary.invoke(messages)
+            return model.invoke(messages)
         except Exception as e:
             error_str = str(e).lower()
-            if any(x in error_str for x in ["quota", "429", "resource", "exhausted", "overloaded"]):
-                print(f"[LLM] WARNING: Gemini quota hit! Switching to {FALLBACK_MODEL}...")
-                self._using_fallback = True
-                self._init_fallback()
-                return self._fallback.invoke(messages)  # Retry immediately with fallback
-
-            # If it's a different error, raise it
+            if any(x in error_str for x in ["quota", "429", "resource", "exhausted", "overloaded", "rate_limit"]):
+                # If using primary, switch to fallback 1
+                if not self._using_fallback:
+                    print(f"[LLM] WARNING: Gemini quota hit! Switching to {FALLBACK_MODEL}...")
+                    self._using_fallback = True
+                    self._init_fallback()
+                    return self._fallback.invoke(messages)
+                # If using fallback 1, switch to fallback 2
+                elif not self._using_fallback_2:
+                    print(f"[LLM] WARNING: {FALLBACK_MODEL} rate limit! Switching to {FALLBACK_MODEL_2}...")
+                    self._using_fallback_2 = True
+                    self._init_fallback_2()
+                    return self._fallback_2.invoke(messages)
+                # All fallbacks exhausted
+                else:
+                    print("[LLM] ERROR: All models rate limited!")
+                    raise e
             raise e
 
     def bind_tools(self, tools):
         """
-        Bind tools to BOTH models.
+        Bind tools to models.
         This is the wrapper that returns a runnable.
         """
-        # We need to return an object that, when invoked, checks the fallback state
-        # and routes to the correct bound model.
         return BoundLLMWithFallback(self, tools)
 
 
 class BoundLLMWithFallback:
-    """Helper class to handle tool binding for the fallback wrapper."""
+    """Helper class to handle tool binding for the fallback wrapper with multiple fallback levels."""
     def __init__(self, wrapper, tools):
         self.wrapper = wrapper
         self.tools = tools
@@ -121,20 +167,33 @@ class BoundLLMWithFallback:
         else:
             self.primary_bound = None
 
-        # Fallback bound is lazy-loaded
+        # Fallback bounds are lazy-loaded
         self.fallback_bound = None
+        self.fallback_2_bound = None
 
     def invoke(self, input):
-        # 1. Use Fallback if active
+        # 1. Use secondary fallback if active
+        if self.wrapper._using_fallback_2:
+            return self._get_fallback_2_bound().invoke(input)
+        
+        # 2. Use primary fallback if active
         if self.wrapper._using_fallback:
-            return self._get_fallback_bound().invoke(input)
+            try:
+                return self._get_fallback_bound().invoke(input)
+            except Exception as e:
+                error_str = str(e).lower()
+                if any(x in error_str for x in ["quota", "429", "resource", "exhausted", "rate_limit"]):
+                    print(f"[LLM] WARNING: {FALLBACK_MODEL} rate limit (during tool call)! Switching to {FALLBACK_MODEL_2}...")
+                    self.wrapper._using_fallback_2 = True
+                    return self._get_fallback_2_bound().invoke(input)
+                raise e
 
-        # 2. Try Primary
+        # 3. Try Primary
         try:
             return self.primary_bound.invoke(input)
         except Exception as e:
             error_str = str(e).lower()
-            if any(x in error_str for x in ["quota", "429", "resource", "exhausted"]):
+            if any(x in error_str for x in ["quota", "429", "resource", "exhausted", "rate_limit"]):
                 print(f"[LLM] WARNING: Gemini quota hit (during tool call)! Switching to {FALLBACK_MODEL}...")
                 self.wrapper._using_fallback = True
                 return self._get_fallback_bound().invoke(input)
@@ -146,6 +205,13 @@ class BoundLLMWithFallback:
             self.wrapper._init_fallback()
             self.fallback_bound = self.wrapper._fallback.bind_tools(self.tools)
         return self.fallback_bound
+
+    def _get_fallback_2_bound(self):
+        """Lazy load and bind secondary fallback model."""
+        if not self.fallback_2_bound:
+            self.wrapper._init_fallback_2()
+            self.fallback_2_bound = self.wrapper._fallback_2.bind_tools(self.tools)
+        return self.fallback_2_bound
 
 
 class BaseAgent(ABC):

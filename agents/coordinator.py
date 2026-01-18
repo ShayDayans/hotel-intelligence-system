@@ -42,35 +42,35 @@ class LangGraphCoordinator:
 
     ROUTING_PROMPT = """Route this query to the appropriate agent(s).
 
-MULTI-AGENT PATTERNS (respond with comma-separated agents in execution order):
-- Compare with competitors (reviews/metrics) → competitor_analyst, review_analyst, benchmark_agent
-- Compare metrics with competitors → competitor_analyst, benchmark_agent  
-- Find competitors then analyze them → competitor_analyst, benchmark_agent
-- Market analysis with comparison → market_intel, benchmark_agent
-
-SINGLE-AGENT PATTERNS (respond with just one agent):
-- Guest feedback for THIS hotel only → review_analyst
+SINGLE-AGENT PATTERNS (USE THESE FOR SIMPLE QUESTIONS - respond with just ONE agent):
+- Guest feedback/reviews/cleanliness/service for MY hotel → review_analyst
+- "What do guests think about X?" (about MY hotel) → review_analyst
 - Who are my competitors / find similar hotels → competitor_analyst
 - Events, weather, external factors → market_intel
-- Price/rating rankings (data already available) → benchmark_agent
+- Price/rating rankings → benchmark_agent
 
-ROUTING RULES:
-1. If query needs data from MULTIPLE sources (competitors + reviews + comparison) → use multiple agents
-2. If query is about "compare" + "competitors" + specific topic (cleanliness/wifi/etc) → competitor_analyst, review_analyst, benchmark_agent
-3. Simple single-topic questions → single agent
+MULTI-AGENT PATTERNS (ONLY use when query explicitly mentions COMPARING with competitors):
+- "Compare MY hotel with competitors on X" → competitor_analyst, review_analyst, benchmark_agent
+- "How do competitors rate on X?" → competitor_analyst, benchmark_agent
+- Find competitors then analyze them → competitor_analyst, benchmark_agent
+
+CRITICAL ROUTING RULES:
+1. Questions about MY hotel's reviews/feedback/cleanliness/service → ONLY review_analyst (NO competitor_analyst)
+2. ONLY use competitor_analyst when query explicitly mentions "competitors", "compare", or "other hotels"
+3. If unsure, use SINGLE agent - don't over-route
 
 Available agents:
-- review_analyst: Guest feedback, sentiment, complaints for hotels (can search reviews for any hotel ID)
-- competitor_analyst: Finding/identifying competitors, nearby hotels, similarity search
+- review_analyst: Guest feedback, sentiment, complaints for THIS hotel
+- competitor_analyst: ONLY for finding/identifying competitors, nearby hotels
 - market_intel: External factors (weather, events, Google Maps data)
-- benchmark_agent: COMPARING and SYNTHESIZING metrics, rankings, final comparison reports
+- benchmark_agent: COMPARING metrics when competitors are already identified
 
 Context from conversation:
 {context}
 
 Current Query: {query}
 
-Respond with agent name(s), comma-separated if multiple needed (e.g., "competitor_analyst, review_analyst, benchmark_agent"):"""
+Respond with agent name(s). For questions about MY hotel only, respond with just ONE agent:"""
 
     def __init__(self, hotel_id: str, hotel_name: str, city: str):
         self.hotel_id = hotel_id

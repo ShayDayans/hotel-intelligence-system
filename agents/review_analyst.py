@@ -18,6 +18,55 @@ from agents.utils.google_maps_scraper import (
 class ReviewAnalystAgent(BaseAgent):
     """Specialist agent for review analysis."""
 
+    # Topic keyword mappings for better filtering
+    TOPIC_KEYWORDS = {
+        'cleanliness': ['clean', 'dirty', 'spotless', 'hygiene', 'tidy', 'sanitary', 'dust', 'stain', 'housekeeping'],
+        'wifi': ['wifi', 'wi-fi', 'internet', 'connection', 'signal', 'speed', 'broadband', 'network'],
+        'breakfast': ['breakfast', 'morning meal', 'buffet', 'food', 'dining'],
+        'staff': ['staff', 'service', 'reception', 'helpful', 'friendly', 'rude', 'attentive'],
+        'location': ['location', 'situated', 'area', 'neighbourhood', 'neighborhood', 'central', 'convenient'],
+        'room': ['room', 'bed', 'comfortable', 'spacious', 'small', 'cozy', 'furniture'],
+        'bathroom': ['bathroom', 'shower', 'toilet', 'bath', 'towel', 'water'],
+        'noise': ['noise', 'quiet', 'loud', 'peaceful', 'noisy', 'sound'],
+        'parking': ['parking', 'car', 'garage', 'vehicle'],
+        'pool': ['pool', 'swimming', 'swim'],
+        'ac': ['air conditioning', 'ac', 'a/c', 'cooling', 'heating', 'temperature'],
+    }
+
+    def _filter_reviews_by_topic(self, reviews: list, topic: str) -> tuple:
+        """
+        Filter reviews to only those mentioning the topic.
+        
+        Returns:
+            (relevant_reviews, other_reviews)
+        """
+        if not topic:
+            return reviews, []
+        
+        topic_lower = topic.lower()
+        
+        # Get keywords for this topic
+        keywords = []
+        for key, words in self.TOPIC_KEYWORDS.items():
+            if key in topic_lower or any(w in topic_lower for w in words):
+                keywords.extend(words)
+        
+        # Also add the topic itself as a keyword
+        keywords.extend(topic_lower.split())
+        keywords = list(set(keywords))  # Deduplicate
+        
+        relevant = []
+        other = []
+        
+        for review in reviews:
+            review_lower = review.lower() if isinstance(review, str) else str(review).lower()
+            if any(kw in review_lower for kw in keywords):
+                relevant.append(review)
+            else:
+                other.append(review)
+        
+        return relevant, other
+
     def get_system_prompt(self) -> str:
         return f"""You are a Review Analyst for {self.hotel_name} in {self.city}.
 
@@ -28,20 +77,19 @@ STRICT RULES - NO HALLUCINATIONS:
 4. NEVER make up or assume guest opinions.
 
 RESPONSE FORMAT:
+- Focus on **RELEVANT REVIEWS** (marked in tool output) that specifically mention the query topic.
 - Quote exact text: "From [source]: '[exact quote]'"
-- Include URL when available
-- If nothing found: "I searched [X] sources but found no reviews about [topic]."
+- If "No reviews specifically mention [topic]" appears, acknowledge this honestly.
+- Don't present general reviews as if they answer the specific question.
 
 TOOL ORDER:
-1. search_booking_reviews - YOUR hotel's internal reviews
-2. search_airbnb_reviews - YOUR hotel's internal reviews
-3. search_competitor_reviews - Use when you have competitor hotel IDs (from previous agent results)
+1. search_booking_reviews - YOUR hotel's internal reviews (filtered by topic)
+2. search_airbnb_reviews - YOUR hotel's internal reviews (filtered by topic)
+3. search_competitor_reviews - Use when you have competitor hotel IDs
 4. search_web_free - web search (use if internal DB has no relevant info)
 
-MULTI-AGENT CONTEXT:
-If you receive "[Results from Previous Agents]" with competitor hotel IDs (like BKG_123 or ABB_456),
-use search_competitor_reviews to get reviews for EACH competitor hotel ID mentioned.
-This is critical for comparison queries.
+IMPORTANT: Tool outputs now separate RELEVANT reviews (mentioning the topic) from OTHER reviews.
+Only use RELEVANT reviews to answer the question. If no relevant reviews exist, say so honestly.
 
 Stop after finding relevant data. Do not call unnecessary tools.
 
@@ -49,20 +97,27 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
 """
 
     def get_tools(self) -> list:
-        return [
+        import os
+        
+        tools = [
             self.search_booking_reviews,
             self.search_airbnb_reviews,
-            self.search_competitor_reviews,  # NEW: Search reviews for any hotel by ID
-            self.scrape_google_maps_reviews,
-            self.scrape_tripadvisor_reviews,
-            self.search_web_google,  # Bright Data SERP API (preferred)
-            self.search_web_free,    # DuckDuckGo fallback (free)
+            self.search_competitor_reviews,
+            self.search_web_google,      # BrightData API - works everywhere
+            self.search_web_free,        # DuckDuckGo - works everywhere
             self.analyze_sentiment_topics,
         ]
+        
+        # Playwright tools only work locally (no browser on Databricks)
+        if "DATABRICKS_RUNTIME_VERSION" not in os.environ:
+            tools.append(self.scrape_google_maps_reviews)
+            tools.append(self.scrape_tripadvisor_reviews)
+        
+        return tools
 
-    def search_booking_reviews(self, query: str, k: int = 5) -> str:
+    def search_booking_reviews(self, query: str, k: int = 10) -> str:
         """
-        Search internal Booking.com reviews.
+        Search internal Booking.com reviews and filter by topic relevance.
         """
         k = int(k)  # Coerce in case LLM passes string
         # Filter by hotel_id to prevent seeing other hotels' data
@@ -76,15 +131,30 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         if not docs:
             return "No Booking.com reviews found in internal database."
 
-        output = f"=== Booking.com Reviews ({len(docs)} found) ===\n\n"
-        for i, doc in enumerate(docs, 1):
-            output += f"[{i}] {doc.page_content}\n\n"
+        # Filter by topic relevance
+        reviews = [doc.page_content for doc in docs]
+        relevant, other = self._filter_reviews_by_topic(reviews, query)
+
+        output = f"=== Booking.com Reviews ({len(docs)} found) ===\n"
+        output += f"(Searched for: '{query}')\n\n"
+
+        if relevant:
+            output += f"**RELEVANT REVIEWS ({len(relevant)} mentioning '{query}'):**\n\n"
+            for i, review in enumerate(relevant[:8], 1):
+                output += f"[{i}] {review}\n\n"
+        else:
+            output += f"**No reviews specifically mention '{query}'.**\n\n"
+
+        if other and len(relevant) < 3:
+            output += f"\n**OTHER REVIEWS (general, not specifically about '{query}'):**\n\n"
+            for i, review in enumerate(other[:3], 1):
+                output += f"[{i}] {review}\n\n"
 
         return output
 
-    def search_airbnb_reviews(self, query: str, k: int = 5) -> str:
+    def search_airbnb_reviews(self, query: str, k: int = 10) -> str:
         """
-        Search internal Airbnb reviews.
+        Search internal Airbnb reviews and filter by topic relevance.
         """
         k = int(k)  # Coerce in case LLM passes string
         # Filter by hotel_id
@@ -98,9 +168,24 @@ Hotel: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         if not docs:
             return "No Airbnb reviews found in internal database."
 
-        output = f"=== Airbnb Reviews ({len(docs)} found) ===\n\n"
-        for i, doc in enumerate(docs, 1):
-            output += f"[{i}] {doc.page_content}\n\n"
+        # Filter by topic relevance
+        reviews = [doc.page_content for doc in docs]
+        relevant, other = self._filter_reviews_by_topic(reviews, query)
+
+        output = f"=== Airbnb Reviews ({len(docs)} found) ===\n"
+        output += f"(Searched for: '{query}')\n\n"
+
+        if relevant:
+            output += f"**RELEVANT REVIEWS ({len(relevant)} mentioning '{query}'):**\n\n"
+            for i, review in enumerate(relevant[:8], 1):
+                output += f"[{i}] {review}\n\n"
+        else:
+            output += f"**No reviews specifically mention '{query}'.**\n\n"
+
+        if other and len(relevant) < 3:
+            output += f"\n**OTHER REVIEWS (general, not specifically about '{query}'):**\n\n"
+            for i, review in enumerate(other[:3], 1):
+                output += f"[{i}] {review}\n\n"
 
         return output
 
@@ -303,9 +388,28 @@ Provide:
                 if not reviews:
                     return "Reached TripAdvisor, but could not extract reviews (Anti-bot or CSS change)."
 
-                output = f"=== LIVE TripAdvisor Reviews for {search_query} ===\n\n"
-                for i, r in enumerate(reviews, 1):
-                    output += f"[{i}] {r}\n\n"
+                # Filter reviews by topic if specified
+                if topic_filter:
+                    relevant, other = self._filter_reviews_by_topic(reviews, topic_filter)
+                    
+                    output = f"=== LIVE TripAdvisor Reviews for {search_query} ===\n"
+                    output += f"(Filtered for topic: '{topic_filter}')\n\n"
+                    
+                    if relevant:
+                        output += f"**RELEVANT TO '{topic_filter.upper()}' ({len(relevant)} found):**\n\n"
+                        for i, r in enumerate(relevant[:10], 1):
+                            output += f"[{i}] {r}\n\n"
+                    else:
+                        output += f"**No reviews specifically mention '{topic_filter}'.**\n\n"
+                    
+                    if other and not relevant:
+                        output += f"\n**OTHER REVIEWS (not mentioning '{topic_filter}'):**\n\n"
+                        for i, r in enumerate(other[:3], 1):
+                            output += f"[{i}] {r}\n\n"
+                else:
+                    output = f"=== LIVE TripAdvisor Reviews for {search_query} ===\n\n"
+                    for i, r in enumerate(reviews, 1):
+                        output += f"[{i}] {r}\n\n"
 
                 return output
 
@@ -430,13 +534,23 @@ Provide:
                     other_results.append(r)
 
             # Combine: relevant first, then others
-            unique_results = relevant_results[:5] + other_results[:3]
-
-            output = f"=== Web Search Results ({len(unique_results)} found) ===\n\n"
-            for i, r in enumerate(unique_results[:8], 1):
-                output += f"[{i}] Title: {r.get('title')}\n"
-                output += f"    Snippet: {r.get('body')}\n"
-                output += f"    Link: {r.get('href')}\n\n"
+            output = f"=== Web Search Results ===\n"
+            output += f"(Searched for: '{topic_str}')\n\n"
+            
+            if relevant_results:
+                output += f"**RELEVANT TO '{topic_str.upper()}' ({len(relevant_results)} found):**\n\n"
+                for i, r in enumerate(relevant_results[:5], 1):
+                    output += f"[{i}] Title: {r.get('title')}\n"
+                    output += f"    Snippet: {r.get('body')}\n"
+                    output += f"    Link: {r.get('href')}\n\n"
+            else:
+                output += f"**No results specifically mention '{topic_str}'.**\n\n"
+            
+            if other_results and len(relevant_results) < 3:
+                output += f"\n**OTHER RESULTS (not specifically about '{topic_str}'):**\n\n"
+                for i, r in enumerate(other_results[:3], 1):
+                    output += f"[{i}] Title: {r.get('title')}\n"
+                    output += f"    Snippet: {r.get('body')}\n\n"
 
             return output
 

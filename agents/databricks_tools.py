@@ -31,6 +31,20 @@ FILESTORE_CHARTS_PATH = "/FileStore/hotel_intel_charts"
 NLP_TIMEOUT = 1200  # 20 minutes for NLP
 LR_TIMEOUT = 1200   # 20 minutes for LR
 
+# Module-level storage for chart URLs (so we can append them to responses)
+_last_chart_urls = []
+
+
+def get_chart_urls() -> List[str]:
+    """Get the chart URLs from the last analysis run."""
+    return _last_chart_urls.copy()
+
+
+def clear_chart_urls():
+    """Clear stored chart URLs."""
+    global _last_chart_urls
+    _last_chart_urls = []
+
 
 # ===========================================
 # HELPER FUNCTIONS
@@ -425,7 +439,10 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
         ui_artifacts = result.get("ui_artifacts", {})
         charts = ui_artifacts.get("charts", {}) if isinstance(ui_artifacts, dict) else {}
     
+    global _last_chart_urls
     chart_urls = []
+    _last_chart_urls = []  # Clear previous URLs
+    
     if charts and property_id:
         raw_id = extract_raw_id(property_id) if property_id else "unknown"
         
@@ -440,6 +457,9 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
                     # Create clickable markdown link
                     display_name = chart_name.replace("_", " ").title()
                     chart_urls.append(f"📊 [{display_name}]({url})")
+        
+        # Store URLs for later retrieval
+        _last_chart_urls = chart_urls.copy()
     
     # Add chart links at the TOP with clear instruction
     if chart_urls:

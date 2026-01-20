@@ -286,9 +286,6 @@ Provide:
         Args:
             query: Optional topic to note (hotel name is always used for search)
             max_reviews: Maximum number of reviews to extract (default: 10)
-        
-        Returns:
-            Formatted string with review text, ratings, and dates
         """
         max_reviews = int(max_reviews)  # Coerce in case LLM passes string
         search_query = self.hotel_name

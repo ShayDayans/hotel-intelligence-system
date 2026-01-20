@@ -112,9 +112,7 @@ Hotel context:
         - Opportunities for improvement
         
         Args:
-            top_n: Number of top insights to return
-            
-        Note: This analysis takes ~15 minutes to complete.
+            top_n: Number of top insights to return (analysis takes ~15 minutes)
         """
         if not DATABRICKS_AVAILABLE:
             return "Feature impact analysis not available. Use rank_by_metric instead."

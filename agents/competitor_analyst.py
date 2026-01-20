@@ -127,9 +127,7 @@ Hotel context:
         - Topics where you have FEWER negative reviews than neighbors (strengths)
         
         Args:
-            include_evidence: Whether to include example review sentences
-            
-        Note: This analysis takes 5-10 minutes to complete.
+            include_evidence: Whether to include example review sentences (analysis takes 5-10 minutes)
         """
         if not DATABRICKS_AVAILABLE:
             return "NLP analysis not available. Use find_competitors_geo instead."

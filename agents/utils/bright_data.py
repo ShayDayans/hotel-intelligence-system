@@ -32,8 +32,22 @@ def search_google_serp(
             - error: str (if success is False)
     """
     try:
-        # Run the async function
-        return asyncio.run(_search_via_mcp(query, num_results))
+        # Run the async function - handle both standalone and notebook environments
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        
+        if loop is not None:
+            # Already in an event loop (e.g., Databricks notebook)
+            # Create a new thread to run the async function
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, _search_via_mcp(query, num_results))
+                return future.result(timeout=60)
+        else:
+            # No running event loop - safe to use asyncio.run()
+            return asyncio.run(_search_via_mcp(query, num_results))
     except Exception as e:
         return {
             "success": False,

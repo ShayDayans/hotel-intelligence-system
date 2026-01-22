@@ -243,18 +243,19 @@ try:
     print("Processing through full pipeline...")
     print()
     
-    response = coordinator.process_message(test_query)
+    # LangGraphCoordinator.run() returns (response, state) tuple
+    response, state = coordinator.run(test_query)
     
     print("-" * 60)
     print("Response (first 800 chars):")
     print("-" * 60)
-    print(response[:800])
+    print(response[:800] if response else "No response")
     print()
     
     # Check for success
-    has_content = len(response) > 100
-    no_error = "agent execution failed" not in response.lower()
-    no_tool_failed = "tool_use_failed" not in response.lower()
+    has_content = response and len(response) > 100
+    no_error = not response or "agent execution failed" not in response.lower()
+    no_tool_failed = not response or "tool_use_failed" not in response.lower()
     
     if has_content and no_error and no_tool_failed:
         print("[OK] TEST 3 PASSED: Coordinator returned valid response")

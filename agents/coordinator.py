@@ -404,10 +404,16 @@ Your answer:"""
         # Multiple agents ran - synthesize results
         print(f"[Graph] Aggregating results from {len(intermediate)} agents: {executed}")
         
-        # Build synthesis prompt
+        # Build synthesis prompt and extract chart links (LLM tends to drop them)
         results_text = ""
+        chart_links = []  # Preserve chart links separately
+        
         for result in intermediate:
             results_text += f"\n\n=== {result['agent'].upper()} RESULTS ===\n{result['response']}"
+            # Extract chart links so they survive synthesis
+            for line in result['response'].split('\n'):
+                if '📊' in line and 'http' in line:
+                    chart_links.append(line.strip())
         
         synthesis_prompt = f"""You are synthesizing results from multiple specialist agents to answer this query:
 
@@ -426,7 +432,13 @@ Synthesized Response:"""
         # Use LLM to synthesize
         synthesis = self.llm.invoke([HumanMessage(content=synthesis_prompt)])
         
-        final_response = f"[Multi-Agent Analysis: {' → '.join(executed)}]\n\n{synthesis.content}"
+        # Add chart links AFTER synthesis (so they don't get dropped by LLM)
+        final_content = synthesis.content
+        if chart_links:
+            chart_section = "**📊 Analysis Charts:**\n" + "\n".join(chart_links)
+            final_content = chart_section + "\n\n" + final_content
+        
+        final_response = f"[Multi-Agent Analysis: {' → '.join(executed)}]\n\n{final_content}"
         
         return {**state, "response": final_response}
 

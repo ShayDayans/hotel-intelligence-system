@@ -42,7 +42,7 @@ FALLBACK_MODEL = "llama-3.3-70b-versatile"
 FALLBACK_MODEL_2 = "llama-3.1-8b-instant"  # Secondary fallback when Llama hits rate limit
 
 # Token budget limits for Groq free tier (6000 TPM)
-MAX_TOOL_OUTPUT_CHARS = 2000  # Truncate tool outputs to ~500 tokens
+MAX_TOOL_OUTPUT_CHARS = 2000  # Truncate tool outputs to ~500 tokens (charts placed first to survive truncation)
 MAX_CONTEXT_CHARS = 1500  # Truncate conversation context
 
 class LLMWithFallback:

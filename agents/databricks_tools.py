@@ -432,7 +432,7 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
     
     output_lines = []
     
-    # PROCESS CHARTS FIRST - put at top so LLM doesn't skip them
+    # PROCESS CHARTS FIRST - put at top so they survive 2000-char truncation
     # Check both 'charts' and 'ui_artifacts.charts' fields (notebook uses ui_artifacts.charts)
     charts = result.get("charts", {})
     if not charts:
@@ -454,21 +454,21 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
             if b64_data and isinstance(b64_data, str):
                 url = save_chart_to_filestore(b64_data, chart_name, raw_id)
                 if url:
-                    # Create clickable markdown link
+                    # Create clickable markdown link (compact format)
                     display_name = chart_name.replace("_", " ").title()
                     chart_urls.append(f"📊 [{display_name}]({url})")
         
         # Store URLs for later retrieval
         _last_chart_urls = chart_urls.copy()
     
-    # Add chart links at the TOP with clear instruction
+    # Add chart links at TOP (compact format to save tokens)
     if chart_urls:
-        output_lines.append("**📈 VISUALIZATION CHARTS (you MUST include these links in your response):**")
+        output_lines.append("📊 CHARTS (PUT FIRST IN RESPONSE):")
         output_lines.extend(chart_urls)
         output_lines.append("")
     
-    # Now add the feature insights
-    output_lines.append("=== Feature Impact Analysis ===\n")
+    # Now add the feature insights (will be summarized/truncated if needed)
+    output_lines.append("=== Top Feature Insights ===\n")
     
     # Filter to top N by importance
     sorted_insights = sorted(
@@ -477,31 +477,26 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
         reverse=True
     )[:top_n]
     
+    # Use compact format to fit within 2000 char limit (after charts)
     for i, insight in enumerate(sorted_insights, 1):
         name = insight.get("name", "Unknown").replace("__imp", "").replace("amen_", "").replace("_", " ").title()
         my_val = insight.get("my_value", "N/A")
         market_avg = insight.get("market_avg", "N/A")
-        trend = insight.get("market_trend", "Unknown")
         impact = insight.get("current_impact", 0)
         opportunity = insight.get("opportunity", 0)
         importance = insight.get("importance_pct", 0)
         
-        # Format numbers
+        # Format numbers compactly
         if isinstance(market_avg, float):
             market_avg = f"{market_avg:.2f}"
         if isinstance(impact, float):
-            impact_str = f"{impact:+.3f}"
+            impact_str = f"{impact:+.2f}"
         else:
             impact_str = str(impact)
-            
-        output_lines.append(f"{i}. **{name}** ({importance:.1f}% importance)")
-        output_lines.append(f"   Your value: {my_val} | Market avg: {market_avg}")
-        output_lines.append(f"   Trend: {trend} | Impact: {impact_str}")
         
-        if isinstance(opportunity, float) and opportunity > 0.05:
-            output_lines.append(f"   Opportunity: +{opportunity:.3f} potential gain")
-        
-        output_lines.append("")
+        # Compact single-line format
+        opp_str = f" | Opp: +{opportunity:.2f}" if (isinstance(opportunity, float) and opportunity > 0.05) else ""
+        output_lines.append(f"{i}. {name} ({importance:.0f}%) - You: {my_val}, Avg: {market_avg}, Impact: {impact_str}{opp_str}")
     
     return "\n".join(output_lines)
 

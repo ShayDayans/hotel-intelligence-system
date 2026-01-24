@@ -34,7 +34,7 @@ except (ImportError, ModuleNotFoundError):
         VALIDATION_AVAILABLE = False
 
 # Configuration
-INDEX_NAME = "booking-agent"
+INDEX_NAME = "airbnb-index"  # Updated to use new airbnb-index
 EMBEDDING_MODEL = "BAAI/bge-m3"
 
 # Fallback Configuration (Groq is excellent for tool calling)

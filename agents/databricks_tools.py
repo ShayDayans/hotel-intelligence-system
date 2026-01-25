@@ -432,12 +432,22 @@ def format_lr_insights(result: Dict[str, Any], top_n: int = 10, property_id: str
     
     output_lines = []
     
+    # DEBUG: Log result structure to find charts
+    print(f"[DEBUG-CHARTS] Result keys: {list(result.keys())}")
+    print(f"[DEBUG-CHARTS] Has 'charts' key: {'charts' in result}")
+    print(f"[DEBUG-CHARTS] Has 'ui_artifacts' key: {'ui_artifacts' in result}")
+    
     # PROCESS CHARTS FIRST - put at top so they survive 2000-char truncation
     # Check both 'charts' and 'ui_artifacts.charts' fields (notebook uses ui_artifacts.charts)
     charts = result.get("charts", {})
     if not charts:
         ui_artifacts = result.get("ui_artifacts", {})
+        print(f"[DEBUG-CHARTS] ui_artifacts type: {type(ui_artifacts)}")
+        if isinstance(ui_artifacts, dict):
+            print(f"[DEBUG-CHARTS] ui_artifacts keys: {list(ui_artifacts.keys())}")
         charts = ui_artifacts.get("charts", {}) if isinstance(ui_artifacts, dict) else {}
+    
+    print(f"[DEBUG-CHARTS] Charts found: {list(charts.keys()) if charts else 'NONE'}")
     
     global _last_chart_urls
     chart_urls = []

@@ -45,26 +45,48 @@ current_job = {
 # CHART CAPTURE PATCH
 # ==============================================
 
-try:
-    from databricks_tools import run_lr_analysis as _orig_lr
+def _capture_charts(result):
+    global captured_charts
+
+    charts = result.get("charts", {})
+    if not charts:
+        ui_artifacts = result.get("ui_artifacts", {})
+        charts = ui_artifacts.get("charts", {}) if isinstance(ui_artifacts, dict) else {}
+
+    captured_charts = []
+    for name, b64 in charts.items():
+        if isinstance(b64, dict):
+            b64 = b64.get("data") or b64.get("base64") or b64.get("image")
+        if b64 and isinstance(b64, str):
+            try:
+                img = PILImage.open(BytesIO(base64.b64decode(b64)))
+                captured_charts.append(img)
+            except Exception as e:
+                print(f"[CHART CAPTURE] Failed to decode {name}: {e}")
+
+def _patch_lr(module):
+    original = module.run_lr_analysis
+
     def patched_lr(hotel_id, timeout_seconds=1200):
-        global captured_charts
-        result = _orig_lr(hotel_id, timeout_seconds)
-        if result.get("charts"):
-            captured_charts = []
-            for name, b64 in result["charts"].items():
-                if b64:
-                    try:
-                        img = PILImage.open(BytesIO(base64.b64decode(b64)))
-                        captured_charts.append(img)
-                    except:
-                        pass
+        result = original(hotel_id, timeout_seconds)
+        _capture_charts(result)
         return result
+
+    module.run_lr_analysis = patched_lr
+
+try:
     import databricks_tools
-    databricks_tools.run_lr_analysis = patched_lr
-    print("[OK] Chart capture enabled")
+    _patch_lr(databricks_tools)
+    print("[OK] Chart capture enabled (databricks_tools)")
 except Exception as e:
-    print(f"[Note] Chart capture not available: {e}")
+    print(f"[Note] Chart capture not available in databricks_tools: {e}")
+
+try:
+    from agents import databricks_tools as agents_databricks_tools
+    _patch_lr(agents_databricks_tools)
+    print("[OK] Chart capture enabled (agents.databricks_tools)")
+except Exception as e:
+    print(f"[Note] Chart capture not available in agents.databricks_tools: {e}")
 
 # ==============================================
 # ASYNC JOB HANDLING

@@ -139,7 +139,12 @@ Property: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         if result.get("status") != "success":
             return f"Analysis failed: {result.get('error_message', result.get('message', 'Unknown error'))}"
         
-        return format_lr_insights(result, top_n=int(top_n), property_id=self.hotel_id)
+        # DEBUG: Print result structure before formatting
+        print(f"[DEBUG-BENCHMARK] LR result keys: {list(result.keys())}")
+        formatted_output = format_lr_insights(result, top_n=int(top_n), property_id=self.hotel_id)
+        print(f"[DEBUG-BENCHMARK] Formatted output length: {len(formatted_output)} chars")
+        print(f"[DEBUG-BENCHMARK] First 300 chars: {formatted_output[:300]}")
+        return formatted_output
 
     def rank_by_metric(self, metric: str, k: int = 10) -> str:
         """

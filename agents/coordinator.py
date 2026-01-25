@@ -238,15 +238,23 @@ Your answer:"""
         query = state["query"]
         
         # Databricks job timeout configuration (in seconds)
-        # NLP and LR tools take ~15 minutes each
+        # Each tool takes ~6-7 minutes, add generous buffer
         DATABRICKS_TIMEOUTS = {
-            "competitor_analyst": 1080,   # 18 min (NLP tool takes ~15 min + buffer)
-            "benchmark_agent": 1080,      # 18 min (LR tool takes ~15 min + buffer)
+            "competitor_analyst": 900,    # 15 min (NLP tool ~6.5 min + buffer)
+            "benchmark_agent": 900,       # 15 min (LR tool ~6.5 min + buffer)
         }
         
         # Check if this agent might use Databricks tools (long-running)
         is_databricks_job = agent_name in DATABRICKS_TIMEOUTS
         timeout = DATABRICKS_TIMEOUTS.get(agent_name, 300)  # Default 5 min
+        
+        # In multi-agent workflows, extend timeout further to account for:
+        # - Accumulated resource usage from previous agents
+        # - Potential driver memory pressure
+        is_multi_agent = len(state.get("agents_executed", [])) > 0
+        if is_multi_agent and is_databricks_job:
+            timeout = int(timeout * 1.3)  # 30% more time for multi-agent workflows
+            print(f"[{agent_name}] Multi-agent workflow detected: extended timeout to {timeout//60}min")
         
         # Token budget limits for context
         MAX_CONV_CONTEXT = 800

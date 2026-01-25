@@ -404,6 +404,12 @@ python agents/Tests/test_web_search.py
 
 # Test Bright Data MCP integration
 python agents/Tests/test_bright_data_mcp.py
+
+# User Testing Framework (interactive or automated)
+python agents/Tests/user_testing.py
+
+# Baseline Comparisons (Raw Data vs Simple Chatbot vs Full System)
+python agents/Tests/baseline_comparison.py
 ```
 
 **Test Coverage:**
@@ -411,6 +417,8 @@ python agents/Tests/test_bright_data_mcp.py
 |------------|-------|---------------|
 | `test_all_agents.py` | 11 | Agent init, anti-hallucination prompts, tools, validation, multi-agent state |
 | `LangGraph_Test` | 9 | Graph state, entity extraction, memory, routing, compression |
+| `user_testing.py` | 15 scenarios | User satisfaction, feedback collection, scenario testing |
+| `baseline_comparison.py` | 5 queries | Raw data vs chatbot vs full system comparison |
 
 ## Data Ingestion
 

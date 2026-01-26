@@ -278,29 +278,48 @@ The system is designed to run on **Databricks**, which provides:
 
 ### Step 3: Install Dependencies on Cluster
 
-**Option A: Using Cluster Libraries (Recommended)**
+**Option A: Using Cluster Libraries (Recommended - Faster)**
 
 1. Go to your cluster → **Libraries** tab
 2. Click **Install New**
 3. Install from **PyPI**:
    ```
-   langchain==0.2.16
-   langchain-core==0.2.39
-   langchain-google-genai==1.0.10
-   langchain-huggingface==0.0.3
-   langchain-pinecone==0.1.3
-   langgraph>=0.2.0
-   langchain-groq>=0.1.0
-   python-dotenv==1.0.1
-   pinecone-client==5.0.1
+   langchain==0.3.14
+   langgraph==0.2.60
+   langchain-google-genai==2.0.7
+   langchain-huggingface==0.1.2
+   langchain-pinecone==0.2.0
+   langchain-groq==0.2.2
+   gradio==3.50.2
+   sentence-transformers
+   spark-nlp
+   nltk
+   duckduckgo-search
+   python-dotenv
    ```
 
-**Option B: Using Notebook Cell (Alternative)**
+**Option B: Using the Provided Notebook (Automatic)**
 
-Create a notebook cell and run:
+The Databricks notebook provided in the project already contains an installation cell at the beginning. If you didn't install dependencies via cluster libraries (Option A), simply run the notebook - it will automatically install all required packages in the first cell:
+
 ```python
-%pip install langchain==0.2.16 langchain-core==0.2.39 langchain-google-genai==1.0.10 langchain-huggingface==0.0.3 langchain-pinecone==0.1.3 langgraph>=0.2.0 langchain-groq>=0.1.0 python-dotenv==1.0.1 pinecone-client==5.0.1
+# 1. Install UI and Embedding models
+%pip install gradio==3.50.2 sentence-transformers --quiet
+
+# 2. Install Utilities
+%pip install spark-nlp nltk duckduckgo-search python-dotenv
+
+# 3. Install LangChain Framework & Graph
+%pip install langchain==0.3.14 langgraph==0.2.60
+
+# 4. Install LangChain Integrations
+%pip install langchain-google-genai==2.0.7 langchain-huggingface==0.1.2 langchain-pinecone==0.2.0 langchain-groq==0.2.2
+
+# 5. Apply changes
+dbutils.library.restartPython()
 ```
+
+**Note**: The notebook will handle dependency installation automatically if needed. Option A (cluster libraries) is faster as dependencies are pre-installed and shared across all notebooks on the cluster.
 
 ### Step 4: Configure Environment Variables
 

@@ -9,6 +9,7 @@ when this module is loaded outside of Databricks.
 """
 
 import json
+import os
 from typing import Optional, Dict, Any, List
 
 
@@ -16,9 +17,31 @@ from typing import Optional, Dict, Any, List
 # CONFIGURATION
 # ===========================================
 
-# Notebook paths (update if cloned to different location)
-NLP_NOTEBOOK_PATH = "/Workspace/Users/alon-gilad@campus.technion.ac.il/(Clone) NLP Tool For Review Analysis"
-LR_NOTEBOOK_PATH = "/Workspace/Users/alon-gilad@campus.technion.ac.il/(Alon Clone) linear regression"
+# Notebook paths (env vars override; fallback to current hardcoded paths)
+def _resolve_notebook_path(env_var: str, fallback_path: str) -> str:
+    path = os.getenv(env_var)
+    return path or fallback_path
+
+
+def _notebook_path_error(notebook_path: str, env_var: str) -> Dict[str, str]:
+    return {
+        "status": "error",
+        "error_message": (
+            "Notebook path not found or inaccessible.\n"
+            f"Path: {notebook_path}\n"
+            f"Set {env_var} to the correct notebook path and retry."
+        )
+    }
+
+
+NLP_NOTEBOOK_PATH = _resolve_notebook_path(
+    "DATABRICKS_NLP_NOTEBOOK_PATH",
+    "/Workspace/Users/alon-gilad@campus.technion.ac.il/(Clone) NLP Tool For Review Analysis"
+)
+LR_NOTEBOOK_PATH = _resolve_notebook_path(
+    "DATABRICKS_LR_NOTEBOOK_PATH",
+    "/Workspace/Users/alon-gilad@campus.technion.ac.il/(Alon Clone) linear regression"
+)
 
 # Data paths
 DELTA_PATH = "/mnt/lab94290/cluster_19/airbnb_h3_simvector"
@@ -239,6 +262,9 @@ def run_nlp_analysis(
                 "status": "error",
                 "error_message": f"Analysis timed out after {timeout_seconds} seconds. Try increasing timeout."
             }
+        error_msg_lower = error_msg.lower()
+        if "not found" in error_msg_lower or "does not exist" in error_msg_lower:
+            return _notebook_path_error(NLP_NOTEBOOK_PATH, "DATABRICKS_NLP_NOTEBOOK_PATH")
         return {
             "status": "error",
             "error_message": error_msg
@@ -407,6 +433,9 @@ def run_lr_analysis(
                 "status": "error",
                 "error_message": f"Analysis timed out after {timeout_seconds} seconds."
             }
+        error_msg_lower = error_msg.lower()
+        if "not found" in error_msg_lower or "does not exist" in error_msg_lower:
+            return _notebook_path_error(LR_NOTEBOOK_PATH, "DATABRICKS_LR_NOTEBOOK_PATH")
         return {
             "status": "error",
             "error_message": error_msg

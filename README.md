@@ -340,6 +340,8 @@ dbutils.library.restartPython()
    GOOGLE_API_KEY=your_gemini_api_key
    GROQ_API_KEY=your_groq_api_key
    BRIGHTDATA_API_TOKEN=your_brightdata_token
+   DATABRICKS_NLP_NOTEBOOK_PATH=/Workspace/Users/you@example.com/(Clone) NLP Tool For Review Analysis
+   DATABRICKS_LR_NOTEBOOK_PATH=/Workspace/Users/you@example.com/(Alon Clone) linear regression
    ```
    
    ![Environment Variables Step 3](images/Env_Var_step3.png)
@@ -351,6 +353,8 @@ dbutils.library.restartPython()
 - `GOOGLE_API_KEY` - Your Google Gemini API key (required for LLM)
 - `GROQ_API_KEY` - Your Groq API key (required for fallback LLM)
 - `BRIGHTDATA_API_TOKEN` - Your Bright Data API token (optional, for web scraping)
+- `DATABRICKS_NLP_NOTEBOOK_PATH` - Full path to the NLP notebook (optional, overrides default)
+- `DATABRICKS_LR_NOTEBOOK_PATH` - Full path to the LR notebook (optional, overrides default)
 
 **Alternative: Using Databricks Secrets (More Secure)**
 
@@ -373,7 +377,25 @@ dbutils.library.restartPython()
    api_key = get_secret("PINECONE_API_KEY")  # Automatically uses secrets or env vars
    ```
 
-### Step 5: Create Databricks Notebook
+### Step 5: Import Required Databricks Tool Notebooks
+
+The NLP and LR tools depend on Databricks notebooks that must exist in your workspace.
+
+1. **Import the notebooks from the repo**:
+   - `agents/Databricks_Notebooks_Tools/NLP Tool.ipynb`
+   - `agents/Databricks_Notebooks_Tools/Linear Regression Tool.ipynb`
+
+2. **Place them in the same workspace as your main notebook**.
+
+3. **If your notebook paths differ, set these env vars**:
+   ```
+   DATABRICKS_NLP_NOTEBOOK_PATH=/Workspace/Users/<you>/Databricks_Notebooks_Tools/NLP Tool
+   DATABRICKS_LR_NOTEBOOK_PATH=/Workspace/Users/<you>/Databricks_Notebooks_Tools/Linear Regression Tool
+   ```
+
+Without these notebooks, the NLP and LR tools will fail.
+
+### Step 6: Create Databricks Notebook
 
 1. **In your Repo**, create a new notebook: `Hotel_Intelligence_Agent.ipynb`
 2. **Copy the interface code** from one of these options:

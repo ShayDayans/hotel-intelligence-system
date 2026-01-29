@@ -208,8 +208,18 @@ Property: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
         neighbors = get_nlp_neighbors(property_id=raw_id)
         evidence = get_nlp_evidence(run_id=result.get("run_id")) if include_evidence else None
         
-        # Format base results
-        output = format_nlp_results(topics, neighbors, include_evidence, evidence)
+        # Extract charts from result (check ui_artifacts.charts)
+        charts = result.get("charts", {})
+        if not charts:
+            ui_artifacts = result.get("ui_artifacts", {})
+            if isinstance(ui_artifacts, dict):
+                charts = ui_artifacts.get("charts", {})
+        
+        # Format base results (now includes charts)
+        output = format_nlp_results(
+            topics, neighbors, include_evidence, evidence,
+            charts=charts, property_id=self.hotel_id
+        )
         
         # If a focus topic was specified, add specific data for that topic
         if focus_topic:

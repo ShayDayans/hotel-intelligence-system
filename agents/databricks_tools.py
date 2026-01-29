@@ -515,7 +515,9 @@ def format_nlp_results(
     topics: List[Dict],
     neighbors: List[Dict],
     include_evidence: bool = False,
-    evidence: Optional[List[Dict]] = None
+    evidence: Optional[List[Dict]] = None,
+    charts: Optional[Dict[str, str]] = None,
+    property_id: Optional[str] = None
 ) -> str:
     """
     Format NLP analysis results for LLM consumption.
@@ -525,11 +527,41 @@ def format_nlp_results(
         neighbors: Neighbor list
         include_evidence: Whether to include evidence sentences
         evidence: Evidence data if include_evidence is True
+        charts: Dict of chart_name -> base64 encoded image data
+        property_id: Property ID for saving charts
         
     Returns:
         Formatted string for agent response
     """
     output_lines = []
+    
+    # PROCESS CHARTS FIRST - put at top so they survive truncation
+    global _last_chart_urls
+    chart_urls = []
+    
+    if charts and property_id:
+        raw_id = extract_raw_id(property_id) if property_id else "unknown"
+        
+        for chart_name, b64_data in charts.items():
+            # Handle both direct base64 strings and nested dict with 'data' key
+            if isinstance(b64_data, dict):
+                b64_data = b64_data.get("data") or b64_data.get("base64") or b64_data.get("image")
+            
+            if b64_data and isinstance(b64_data, str):
+                url = save_chart_to_filestore(b64_data, chart_name, raw_id)
+                if url:
+                    # Create clickable markdown link
+                    display_name = chart_name.replace("_", " ").title()
+                    chart_urls.append(f"📊 [{display_name}]({url})")
+        
+        # Store URLs for later retrieval
+        _last_chart_urls = chart_urls.copy()
+    
+    # Add chart links at TOP
+    if chart_urls:
+        output_lines.append("📊 CHARTS (PUT FIRST IN RESPONSE):")
+        output_lines.extend(chart_urls)
+        output_lines.append("")
     
     # Neighbors section
     if neighbors:

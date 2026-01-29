@@ -187,11 +187,24 @@ Property: {self.hotel_name} (ID: {self.hotel_id}) in {self.city}
 
     def get_my_hotel_data(self) -> str:
         """Get all available data for your hotel."""
-        for namespace in ["booking_hotels", "airbnb_hotels"]:
-            docs = self.search_rag(self.hotel_name, namespace=namespace, k=1)
-            if docs:
+        # Determine correct namespace based on hotel_id prefix
+        namespace = "booking_hotels" if self.hotel_id.startswith("BKG_") else "airbnb_hotels"
+        
+        # First try: Search by hotel_id (exact match, most reliable)
+        docs = self.search_rag(self.hotel_id, namespace=namespace, k=1)
+        if docs:
+            # Verify it's actually our hotel by checking hotel_id in metadata
+            if docs[0].metadata.get("hotel_id") == self.hotel_id:
                 return f"=== Your Hotel Data ===\n\n{docs[0].page_content}"
-        return "Hotel data not found in database."
+        
+        # Second try: Search by hotel name (similarity match)
+        docs = self.search_rag(self.hotel_name, namespace=namespace, k=3)
+        for doc in docs:
+            # Verify it's actually our hotel by checking hotel_id in metadata
+            if doc.metadata.get("hotel_id") == self.hotel_id:
+                return f"=== Your Hotel Data ===\n\n{doc.page_content}"
+        
+        return f"Hotel data not found in database. (Searched for ID: {self.hotel_id}, Name: {self.hotel_name} in {namespace})"
 
     def get_competitor_data(self, hotel_id: str) -> str:
         """Get data for a specific competitor."""
